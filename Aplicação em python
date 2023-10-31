@@ -1,0 +1,114 @@
+# pip install scikit-fuzzy ## Caso não tenha a biblioteca scikit-fuzzy instalada ##
+
+import numpy as np
+import skfuzzy as fuzz
+from skfuzzy import control as ctrl
+import pandas as pd
+
+def buscar_produtos_por_palavra_chave(arquivo, palavra_chave):
+    try:
+        # Lê o arquivo Excel
+        df = pd.read_excel(arquivo)
+
+        # Seleciona as células na coluna "produtos" que contenham a palavra-chave
+        produtos_selecionados = df[df['Produto'].str.contains(palavra_chave, case=False)]
+
+        return produtos_selecionados
+    except Exception as e:
+        return str(e)
+
+arquivo_excel = "/content/produtos.xlsx"
+palavra_chave = input("Digite qual produto deseje pesquisar: ")
+resultados = buscar_produtos_por_palavra_chave(arquivo_excel, palavra_chave)
+
+if isinstance(resultados, pd.DataFrame):
+
+    # As variáveis de entrada e saída
+    qualidade = ctrl.Antecedent(np.arange(0, 11, 1), 'qualidade')
+    tempo_entrega = ctrl.Antecedent(np.arange(0, 11, 1), 'tempo_entrega')
+    tipo_compra = ctrl.Consequent(np.arange(0, 101, 1), 'tipo_compra')
+
+    # As funções de pertinência para as variáveis de entrada e saída
+    qualidade['baixa'] = fuzz.trimf(qualidade.universe, [0, 0, 5])
+    qualidade['média'] = fuzz.trimf(qualidade.universe, [0, 5, 10])
+    qualidade['alta'] = fuzz.trimf(qualidade.universe, [5, 10, 10])
+
+    tempo_entrega['lento'] = fuzz.trimf(tempo_entrega.universe, [0, 0, 5])
+    tempo_entrega['médio'] = fuzz.trimf(tempo_entrega.universe, [0, 5, 10])
+    tempo_entrega['rápido'] = fuzz.trimf(tempo_entrega.universe, [5, 10, 10])
+
+    tipo_compra['boa compra'] = fuzz.trimf(tipo_compra.universe, [60, 100, 100])
+    tipo_compra['média compra'] = fuzz.trimf(tipo_compra.universe, [40, 50, 60])
+    tipo_compra['péssima compra'] = fuzz.trimf(tipo_compra.universe, [0, 0, 40])
+
+    # A regras fuzzy
+    r1 = ctrl.Rule(qualidade['baixa'] & tempo_entrega['lento'], tipo_compra['péssima compra'])
+    r2 = ctrl.Rule(qualidade['média'] & tempo_entrega['médio'], tipo_compra['média compra'])
+    r3 = ctrl.Rule(qualidade['alta'] & tempo_entrega['rápido'], tipo_compra['boa compra'])
+    r4 = ctrl.Rule(qualidade['baixa'] & tempo_entrega['médio'], tipo_compra['péssima compra'])
+    r5 = ctrl.Rule(qualidade['média'] & tempo_entrega['lento'], tipo_compra['péssima compra'])
+    r6 = ctrl.Rule(qualidade['alta'] & tempo_entrega['médio'], tipo_compra['boa compra'])
+    r7 = ctrl.Rule(qualidade['baixa'] & tempo_entrega['rápido'], tipo_compra['média compra'])
+    r8 = ctrl.Rule(qualidade['média'] & tempo_entrega['rápido'], tipo_compra['boa compra'])
+    r9 = ctrl.Rule(qualidade['alta'] & tempo_entrega['lento'], tipo_compra['média compra'])
+
+    # O sistema de controle fuzzy
+    sistema_fuzzy = ctrl.ControlSystem([r1, r2, r3, r4, r5, r6, r7, r8, r9])
+
+    # Simulação
+    simulacao = ctrl.ControlSystemSimulation(sistema_fuzzy)
+
+# Lista para armazenar as categorias de compra
+categorias_de_compra = []
+
+# Para cada linha do DataFrame
+for _, linha in resultados.iterrows():
+    # Define as entradas com base nos valores da linha atual
+    simulacao.input['qualidade'] = linha['Qualidade']
+    simulacao.input['tempo_entrega'] = linha['Tempo de entrega']
+
+    # Calculo do resultado
+    simulacao.compute()
+
+    # O valor de "tipo_compra"
+    valor_tipo_compra = simulacao.output['tipo_compra']
+
+    # Determinando a categoria com base nos limites das funções de pertinência
+    if valor_tipo_compra >= 60:
+        categoria = "boa compra"
+    elif valor_tipo_compra >= 40:
+        categoria = "média compra"
+    else:
+        categoria = "péssima compra"
+
+    # Adicionando a categoria à lista de categorias de compra
+    categorias_de_compra.append(categoria)
+
+# Adicionando a coluna de categorias ao DataFrame resultados
+resultados['Categoria de Compra'] = categorias_de_compra
+
+# Crie uma lista para armazenar os valores de tipo_compra
+valores_tipo_compra = []
+
+# Itere sobre cada linha do DataFrame
+for _, linha in resultados.iterrows():
+    # Definindo as entradas com base nos valores da linha atual
+    simulacao.input['qualidade'] = linha['Qualidade']
+    simulacao.input['tempo_entrega'] = linha['Tempo de entrega']
+
+    # O resultado
+    simulacao.compute()
+
+    # O valor de "tipo_compra"
+    valor_tipo_compra = simulacao.output['tipo_compra']
+
+    # Adicionando o valor à lista de valores de tipo_compra
+    valores_tipo_compra.append(valor_tipo_compra)
+
+# Adicionando a coluna de valores de tipo_compra ao DataFrame resultados
+resultados['Valor_tipo_compra'] = valores_tipo_compra
+
+# Imprição do DataFrame
+print("Produtos Selecionados:")
+print(resultados)
+
